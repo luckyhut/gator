@@ -36,9 +36,13 @@ func Read() Config {
 	return config
 }
 
-func (conf Config) SetUser(name string) {
+func (conf Config) SetUser(name string) error {
 	conf.CurrentUserName = name
-	write(conf)
+	err := write(conf)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func getConfigFilePath() (string, error) {
