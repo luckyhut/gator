@@ -56,29 +56,46 @@ func (q *Queries) CreateFeed(ctx context.Context, arg CreateFeedParams) (Feed, e
 	return i, err
 }
 
-const getFeed = `-- name: GetFeed :one
-select id, created_at, updated_at, name
-from users
-where name = $1
+const getFeed = `-- name: GetFeed :many
+SELECT f.name, f.url, u.name
+FROM feeds f
+JOIN users u ON f.user_id = u.id
 `
 
-func (q *Queries) GetFeed(ctx context.Context, name string) (User, error) {
-	row := q.db.QueryRowContext(ctx, getFeed, name)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.Name,
-	)
-	return i, err
+type GetFeedRow struct {
+	Name   sql.NullString
+	Url    sql.NullString
+	Name_2 string
 }
 
-const resetFeed = `-- name: ResetFeed :exec
-DELETE FROM users
+func (q *Queries) GetFeed(ctx context.Context) ([]GetFeedRow, error) {
+	rows, err := q.db.QueryContext(ctx, getFeed)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetFeedRow
+	for rows.Next() {
+		var i GetFeedRow
+		if err := rows.Scan(&i.Name, &i.Url, &i.Name_2); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const resetFeeds = `-- name: ResetFeeds :exec
+DELETE FROM feeds
 `
 
-func (q *Queries) ResetFeed(ctx context.Context) error {
-	_, err := q.db.ExecContext(ctx, resetFeed)
+func (q *Queries) ResetFeeds(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, resetFeeds)
 	return err
 }

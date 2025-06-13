@@ -10,10 +10,10 @@ VALUES (
 )
 RETURNING *;
 
--- name: GetFeed :one
-select *
-from users
-where name = $1;
+-- name: GetFeed :many
+SELECT f.name, f.url, u.name
+FROM feeds f
+JOIN users u ON f.user_id = u.id;
 
--- name: ResetFeed :exec
-DELETE FROM users;
+-- name: ResetFeeds :exec
+DELETE FROM feeds;

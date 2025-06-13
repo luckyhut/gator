@@ -96,6 +96,14 @@ func HandlerReset(s *State, cmd Command) error {
 		os.Exit(1)
 	}
 	fmt.Println("Users successfully deleted from database")
+
+	err = s.Db.ResetFeeds(dbContext)
+	if err != nil {
+		fmt.Println("Unable to delete feeds from database")
+		os.Exit(1)
+	}
+	fmt.Println("Feeds successfully deleted from database")
+
 	return nil
 }
 
@@ -125,8 +133,8 @@ func printUsers(s *State, users []string) {
 func HandlerAgg(s *State, cmd Command) error {
 	// create a context and call helper
 	httpContext := context.Background()
-	// url := cmd.Args[0]
-	result, err := fetchFeed(httpContext, "https://www.wagslane.dev/index.xml")
+
+	result, err := fetchFeed(httpContext, cmd.Args[0])
 
 	// exit if error
 	if err != nil {
@@ -218,6 +226,18 @@ func HandlerAddFeed(s *State, cmd Command) error {
 	s.Db.CreateFeed(dbContext, params)
 
 	fmt.Println("Params: ---------- \n", params)
+
+	return nil
+}
+
+func HandlerFeeds(s *State, cmd Command) error {
+	dbContext := context.Background()
+	result, err := s.Db.GetFeed(dbContext)
+	if err != nil {
+		fmt.Println("Unable to get list of feeds from database")
+		os.Exit(1)
+	}
+	fmt.Println(result)
 
 	return nil
 }
