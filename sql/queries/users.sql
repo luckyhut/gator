@@ -13,6 +13,11 @@ select *
 from users
 where name = $1;
 
+-- name: GetUuid :one
+select *
+from users
+where name = $1;
+
 -- name: ResetUsers :exec
 DELETE FROM users;
 

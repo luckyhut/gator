@@ -92,6 +92,24 @@ func (q *Queries) GetUsers(ctx context.Context) ([]string, error) {
 	return items, nil
 }
 
+const getUuid = `-- name: GetUuid :one
+select id, created_at, updated_at, name
+from users
+where name = $1
+`
+
+func (q *Queries) GetUuid(ctx context.Context, name string) (User, error) {
+	row := q.db.QueryRowContext(ctx, getUuid, name)
+	var i User
+	err := row.Scan(
+		&i.ID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Name,
+	)
+	return i, err
+}
+
 const resetUsers = `-- name: ResetUsers :exec
 DELETE FROM users
 `
