@@ -104,6 +104,12 @@ func HandlerReset(s *State, cmd Command) error {
 	}
 	fmt.Println("Feeds successfully deleted from database")
 
+	err = s.Db.ResetFeedFollow(dbContext)
+	if err != nil {
+		fmt.Println("Unable to delete feed_follows from database")
+		os.Exit(1)
+	}
+	fmt.Println("Feed_follows successfully deleted from database")
 	return nil
 }
 
@@ -206,9 +212,11 @@ func HandlerAddFeed(s *State, cmd Command) error {
 	dbContext := context.Background()
 	name := sql.NullString{String: cmd.Args[0], Valid: true}
 	url := sql.NullString{String: cmd.Args[1], Valid: true}
+	fmt.Println(dbContext, s.Config.CurrentUserName)
 	user, err := s.Db.GetUuid(dbContext, s.Config.CurrentUserName)
 	if err != nil {
 		fmt.Println("Error connecting to database")
+		fmt.Println("something weird here")
 		os.Exit(1)
 	}
 	userUuid := uuid.NullUUID{UUID: user.ID, Valid: true}
@@ -225,19 +233,107 @@ func HandlerAddFeed(s *State, cmd Command) error {
 	// run createfeed
 	s.Db.CreateFeed(dbContext, params)
 
-	fmt.Println("Params: ---------- \n", params)
+	feed_id, err := s.Db.GetFeed(dbContext, url)
+	if err != nil {
+		fmt.Println("Error getting feed from database")
+		os.Exit(1)
+	}
+
+	feedFollowsUuid := uuid.New()
+	feedFollowParams := database.CreateFeedFollowParams{
+		ID:        feedFollowsUuid,
+		CreatedAt: curTime,
+		UpdatedAt: curTime,
+		UserID:    user.ID,
+		FeedID:    feed_id,
+	}
+
+	s.Db.CreateFeedFollow(dbContext, feedFollowParams)
 
 	return nil
 }
 
 func HandlerFeeds(s *State, cmd Command) error {
 	dbContext := context.Background()
-	result, err := s.Db.GetFeed(dbContext)
+	result, err := s.Db.GetAllFeeds(dbContext)
 	if err != nil {
 		fmt.Println("Unable to get list of feeds from database")
 		os.Exit(1)
 	}
 	fmt.Println(result)
+
+	return nil
+}
+
+func HandlerFollow(s *State, cmd Command) error {
+	if len(cmd.Args) == 0 {
+		fmt.Println("Must include arguments with command")
+		os.Exit(1)
+	}
+	dbContext := context.Background()
+
+	// id
+	feedFollowUuid := uuid.New()
+
+	// updated_at, created_at
+	curTime := time.Now()
+
+	// user_id
+	user, err := s.Db.GetUser(dbContext, s.Config.CurrentUserName)
+	if err != nil {
+		fmt.Println("Error getting user from database")
+		os.Exit(1)
+	}
+	//	userIdNull := uuid.NullUUID{UUID: user.ID, Valid: true}
+
+	// feed_id
+	url := sql.NullString{String: cmd.Args[0], Valid: true}
+	feed_id, err := s.Db.GetFeed(dbContext, url) // feed_id
+	if err != nil {
+		fmt.Println("Error getting feed from database")
+		os.Exit(1)
+	}
+
+	params := database.CreateFeedFollowParams{
+		ID:        feedFollowUuid,
+		CreatedAt: curTime,
+		UpdatedAt: curTime,
+		UserID:    user.ID,
+		FeedID:    feed_id,
+	}
+
+	err = s.Db.CreateFeedFollow(dbContext, params)
+	if err != nil {
+		fmt.Println("Could not create FeedFollow record")
+		os.Exit(1)
+	}
+
+	return nil
+}
+
+func HandlerFollowing(s *State, cmd Command) error {
+	// get user id
+	dbContext := context.Background()
+	user, err := s.Db.GetUser(dbContext, s.Config.CurrentUserName)
+	if err != nil {
+		fmt.Println("Could not get user")
+		os.Exit(1)
+	}
+
+	// get list of follows
+	result, err := s.Db.GetFeedFollowsForUser(dbContext, user.ID)
+	if err != nil {
+		fmt.Println("Unable to get list of feeds from database")
+		os.Exit(1)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+
+	for i := 0; i < len(result); i++ {
+		fmt.Print("* ", result[i].FeedName.String, "\n")
+	}
 
 	return nil
 }

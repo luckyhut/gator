@@ -30,6 +30,8 @@ func main() {
 	commands.Register("agg", internal.HandlerAgg)
 	commands.Register("addfeed", internal.HandlerAddFeed)
 	commands.Register("feeds", internal.HandlerFeeds)
+	commands.Register("follow", internal.HandlerFollow)
+	commands.Register("following", internal.HandlerFollowing)
 
 	// open connection to database
 	db, err := sql.Open("postgres", state.Config.DbUrl)
