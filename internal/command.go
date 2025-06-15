@@ -8,7 +8,6 @@ import (
 	"html"
 	"io"
 	"net/http"
-	"os"
 	"time"
 
 	"database/sql"
@@ -38,8 +37,7 @@ func HandlerLogin(s *State, cmd Command) error {
 	dbContext := context.Background()
 	_, err := s.Db.GetUser(dbContext, cmd.Args[0])
 	if err != nil {
-		fmt.Printf("User %s is not registered\n", cmd.Args[0])
-		os.Exit(1)
+		return fmt.Errorf("User %s is not registered\n", cmd.Args[0])
 	}
 
 	// set the user in config file
@@ -64,8 +62,7 @@ func HandlerRegister(s *State, cmd Command) error {
 	// check to see if user is registered
 	_, err := s.Db.GetUser(dbContext, cmd.Args[0])
 	if err == nil {
-		fmt.Println("User is already registered")
-		os.Exit(1)
+		return errors.New("User is already registered")
 	}
 
 	// create user to pass to database
@@ -92,22 +89,19 @@ func HandlerReset(s *State, cmd Command) error {
 
 	err := s.Db.ResetUsers(dbContext)
 	if err != nil {
-		fmt.Println("Unable to delete users from database")
-		os.Exit(1)
+		return errors.New("Unable to delete users from database")
 	}
 	fmt.Println("Users successfully deleted from database")
 
 	err = s.Db.ResetFeeds(dbContext)
 	if err != nil {
-		fmt.Println("Unable to delete feeds from database")
-		os.Exit(1)
+		return errors.New("Unable to delete feeds from database")
 	}
 	fmt.Println("Feeds successfully deleted from database")
 
 	err = s.Db.ResetFeedFollow(dbContext)
 	if err != nil {
-		fmt.Println("Unable to delete feed_follows from database")
-		os.Exit(1)
+		return errors.New("Unable to delete feed_follows from database")
 	}
 	fmt.Println("Feed_follows successfully deleted from database")
 	return nil
@@ -119,8 +113,7 @@ func HandlerUsers(s *State, cmd Command) error {
 
 	users, err := s.Db.GetUsers(dbContext)
 	if err != nil {
-		fmt.Println("Unable to get a list of users")
-		os.Exit(1)
+		return errors.New("Unable to get a list of users")
 	}
 	printUsers(s, users)
 	return nil
@@ -144,8 +137,7 @@ func HandlerAgg(s *State, cmd Command) error {
 
 	// exit if error
 	if err != nil {
-		fmt.Println("Error registering site")
-		os.Exit(1)
+		errors.New("Error registering site")
 	}
 
 	fmt.Println(result)
@@ -156,8 +148,7 @@ func fetchFeed(ctx context.Context, feedURL string) (*rss.RSSFeed, error) {
 	// make an http request and client
 	req, err := http.NewRequestWithContext(ctx, "GET", feedURL, nil)
 	if err != nil {
-		fmt.Println("Unable to get a request")
-		os.Exit(1)
+		return nil, errors.New("Unable to get a request")
 	}
 	client := &http.Client{}
 
@@ -165,16 +156,14 @@ func fetchFeed(ctx context.Context, feedURL string) (*rss.RSSFeed, error) {
 	req.Header.Set("User-Agent", "gator")
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Println("Error running HTTP request")
-		os.Exit(1)
+		return nil, errors.New("Error running HTTP request")
 	}
 	defer resp.Body.Close()
 
 	// use xml.Unmarshal to fit the response in a struct
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Println("Error reading response body")
-		os.Exit(1)
+		return nil, errors.New("Error reading response body")
 	}
 
 	// xml.Unmarshal (works the same as json.Unmarshal)
@@ -182,29 +171,26 @@ func fetchFeed(ctx context.Context, feedURL string) (*rss.RSSFeed, error) {
 	err = xml.Unmarshal(body, &feed)
 	fmt.Println(feed)
 	if err != nil {
-		fmt.Println("Error unmarshaling xml data")
-		os.Exit(1)
+		return nil, errors.New("Error unmarshaling xml data")
 	}
 
-	_ = unescapeHtml(&feed)
+	unescapeHtml(&feed)
 
 	return &feed, nil
 }
 
-func unescapeHtml(feed *rss.RSSFeed) error {
+func unescapeHtml(feed *rss.RSSFeed) {
 	feed.Channel.Title = html.UnescapeString(feed.Channel.Title)
 	feed.Channel.Description = html.UnescapeString(feed.Channel.Description)
 	for i := range feed.Channel.Item {
 		feed.Channel.Item[i].Title = html.UnescapeString(feed.Channel.Item[i].Title)
 		feed.Channel.Item[i].Title = html.UnescapeString(feed.Channel.Item[i].Title)
 	}
-	return nil
 }
 
 func HandlerAddFeed(s *State, cmd Command) error {
 	if len(cmd.Args) < 2 {
-		fmt.Println("Must include a name and url with this command")
-		os.Exit(1)
+		return errors.New("Must include a name and url with this command")
 	}
 
 	feedUuid := uuid.New()
@@ -212,12 +198,9 @@ func HandlerAddFeed(s *State, cmd Command) error {
 	dbContext := context.Background()
 	name := sql.NullString{String: cmd.Args[0], Valid: true}
 	url := sql.NullString{String: cmd.Args[1], Valid: true}
-	fmt.Println(dbContext, s.Config.CurrentUserName)
 	user, err := s.Db.GetUuid(dbContext, s.Config.CurrentUserName)
 	if err != nil {
-		fmt.Println("Error connecting to database")
-		fmt.Println("something weird here")
-		os.Exit(1)
+		return errors.New("Error connecting to database")
 	}
 	userUuid := uuid.NullUUID{UUID: user.ID, Valid: true}
 
@@ -235,8 +218,7 @@ func HandlerAddFeed(s *State, cmd Command) error {
 
 	feed_id, err := s.Db.GetFeed(dbContext, url)
 	if err != nil {
-		fmt.Println("Error getting feed from database")
-		os.Exit(1)
+		return errors.New("Error getting feed from database")
 	}
 
 	feedFollowsUuid := uuid.New()
@@ -257,8 +239,7 @@ func HandlerFeeds(s *State, cmd Command) error {
 	dbContext := context.Background()
 	result, err := s.Db.GetAllFeeds(dbContext)
 	if err != nil {
-		fmt.Println("Unable to get list of feeds from database")
-		os.Exit(1)
+		return errors.New("Unable to get list of feeds from database")
 	}
 	fmt.Println(result)
 
@@ -267,8 +248,7 @@ func HandlerFeeds(s *State, cmd Command) error {
 
 func HandlerFollow(s *State, cmd Command) error {
 	if len(cmd.Args) == 0 {
-		fmt.Println("Must include arguments with command")
-		os.Exit(1)
+		return errors.New("Must include arguments with command")
 	}
 	dbContext := context.Background()
 
@@ -281,8 +261,7 @@ func HandlerFollow(s *State, cmd Command) error {
 	// user_id
 	user, err := s.Db.GetUser(dbContext, s.Config.CurrentUserName)
 	if err != nil {
-		fmt.Println("Error getting user from database")
-		os.Exit(1)
+		return errors.New("Error getting user from database")
 	}
 	//	userIdNull := uuid.NullUUID{UUID: user.ID, Valid: true}
 
@@ -290,8 +269,7 @@ func HandlerFollow(s *State, cmd Command) error {
 	url := sql.NullString{String: cmd.Args[0], Valid: true}
 	feed_id, err := s.Db.GetFeed(dbContext, url) // feed_id
 	if err != nil {
-		fmt.Println("Error getting feed from database")
-		os.Exit(1)
+		return errors.New("Error getting feed from database")
 	}
 
 	params := database.CreateFeedFollowParams{
@@ -304,8 +282,7 @@ func HandlerFollow(s *State, cmd Command) error {
 
 	err = s.Db.CreateFeedFollow(dbContext, params)
 	if err != nil {
-		fmt.Println("Could not create FeedFollow record")
-		os.Exit(1)
+		return errors.New("Could not create FeedFollow record")
 	}
 
 	return nil
@@ -316,15 +293,13 @@ func HandlerFollowing(s *State, cmd Command) error {
 	dbContext := context.Background()
 	user, err := s.Db.GetUser(dbContext, s.Config.CurrentUserName)
 	if err != nil {
-		fmt.Println("Could not get user")
-		os.Exit(1)
+		return errors.New("Could not get user")
 	}
 
 	// get list of follows
 	result, err := s.Db.GetFeedFollowsForUser(dbContext, user.ID)
 	if err != nil {
-		fmt.Println("Unable to get list of feeds from database")
-		os.Exit(1)
+		return errors.New("Unable to get list of feeds from database")
 	}
 
 	if len(result) == 0 {

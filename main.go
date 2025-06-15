@@ -43,7 +43,7 @@ func main() {
 
 	// get command
 	if len(os.Args) < 2 {
-		fmt.Println("error: not enough arguments")
+		fmt.Println("Error, not enough arguments")
 		os.Exit(1)
 	}
 
@@ -51,6 +51,10 @@ func main() {
 		Name: os.Args[1],
 		Args: os.Args[2:],
 	}
-	// fmt.Println(*current_command)
-	commands.Run(state, *current_command)
+
+	err = commands.Run(state, *current_command)
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
 }
