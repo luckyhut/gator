@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"database/sql"
+
 	"github.com/google/uuid"
 	"github.com/luckyhut/gator/internal/config"
 	"github.com/luckyhut/gator/internal/database"
@@ -188,7 +189,7 @@ func unescapeHtml(feed *rss.RSSFeed) {
 	}
 }
 
-func HandlerAddFeed(s *State, cmd Command) error {
+func HandlerAddFeed(s *State, cmd Command, user database.User) error {
 	if len(cmd.Args) < 2 {
 		return errors.New("Must include a name and url with this command")
 	}
@@ -198,10 +199,7 @@ func HandlerAddFeed(s *State, cmd Command) error {
 	dbContext := context.Background()
 	name := sql.NullString{String: cmd.Args[0], Valid: true}
 	url := sql.NullString{String: cmd.Args[1], Valid: true}
-	user, err := s.Db.GetUuid(dbContext, s.Config.CurrentUserName)
-	if err != nil {
-		return errors.New("Error connecting to database")
-	}
+
 	userUuid := uuid.NullUUID{UUID: user.ID, Valid: true}
 
 	params := database.CreateFeedParams{
@@ -246,7 +244,7 @@ func HandlerFeeds(s *State, cmd Command) error {
 	return nil
 }
 
-func HandlerFollow(s *State, cmd Command) error {
+func HandlerFollow(s *State, cmd Command, user database.User) error {
 	if len(cmd.Args) == 0 {
 		return errors.New("Must include arguments with command")
 	}
@@ -257,13 +255,6 @@ func HandlerFollow(s *State, cmd Command) error {
 
 	// updated_at, created_at
 	curTime := time.Now()
-
-	// user_id
-	user, err := s.Db.GetUser(dbContext, s.Config.CurrentUserName)
-	if err != nil {
-		return errors.New("Error getting user from database")
-	}
-	//	userIdNull := uuid.NullUUID{UUID: user.ID, Valid: true}
 
 	// feed_id
 	url := sql.NullString{String: cmd.Args[0], Valid: true}
@@ -288,13 +279,26 @@ func HandlerFollow(s *State, cmd Command) error {
 	return nil
 }
 
-func HandlerFollowing(s *State, cmd Command) error {
+func HandlerUnfollow(s *State, cmd Command, user database.User) error {
+	dbContext := context.Background()
+	url := sql.NullString{String: cmd.Args[0], Valid: true}
+	feed_id, err := s.Db.GetFeed(dbContext, url) // feed_id
+	if err != nil {
+		return errors.New("Error getting feed from database")
+	}
+
+	params := database.UnfollowParams{
+		UserID: user.ID,
+		FeedID: feed_id,
+	}
+
+	s.Db.Unfollow(dbContext, params)
+	return nil
+}
+
+func HandlerFollowing(s *State, cmd Command, user database.User) error {
 	// get user id
 	dbContext := context.Background()
-	user, err := s.Db.GetUser(dbContext, s.Config.CurrentUserName)
-	if err != nil {
-		return errors.New("Could not get user")
-	}
 
 	// get list of follows
 	result, err := s.Db.GetFeedFollowsForUser(dbContext, user.ID)
@@ -327,4 +331,14 @@ func (c *Commands) Run(s *State, cmd Command) error {
 
 func (c *Commands) Register(name string, f func(*State, Command) error) {
 	c.Commands_list[name] = f
+}
+
+func MiddlewareLoggedIn(handler func(s *State, cmd Command, user database.User) error) func(*State, Command) error {
+	return func(s *State, cmd Command) error {
+		user, err := s.Db.GetUser(context.Background(), s.Config.CurrentUserName)
+		if err != nil {
+			return errors.New("User is not registered")
+		}
+		return handler(s, cmd, user)
+	}
 }

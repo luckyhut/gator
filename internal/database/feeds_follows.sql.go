@@ -95,3 +95,38 @@ func (q *Queries) ResetFeedFollow(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, resetFeedFollow)
 	return err
 }
+
+const unfollow = `-- name: Unfollow :many
+DELETE FROM feed_follows
+WHERE user_id = $1
+AND feed_id = $2
+RETURNING user_id
+`
+
+type UnfollowParams struct {
+	UserID uuid.UUID
+	FeedID uuid.UUID
+}
+
+func (q *Queries) Unfollow(ctx context.Context, arg UnfollowParams) ([]uuid.UUID, error) {
+	rows, err := q.db.QueryContext(ctx, unfollow, arg.UserID, arg.FeedID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var user_id uuid.UUID
+		if err := rows.Scan(&user_id); err != nil {
+			return nil, err
+		}
+		items = append(items, user_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

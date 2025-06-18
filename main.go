@@ -3,13 +3,12 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
-	"os"
-
-	_ "github.com/lib/pq"
+	_ "github.com/lib/pq" // for sql interaction
 	"github.com/luckyhut/gator/internal"
 	"github.com/luckyhut/gator/internal/config"
 	"github.com/luckyhut/gator/internal/database"
+	"log"
+	"os"
 )
 
 func main() {
@@ -28,10 +27,11 @@ func main() {
 	commands.Register("reset", internal.HandlerReset)
 	commands.Register("users", internal.HandlerUsers)
 	commands.Register("agg", internal.HandlerAgg)
-	commands.Register("addfeed", internal.HandlerAddFeed)
 	commands.Register("feeds", internal.HandlerFeeds)
-	commands.Register("follow", internal.HandlerFollow)
-	commands.Register("following", internal.HandlerFollowing)
+	commands.Register("addfeed", internal.MiddlewareLoggedIn(internal.HandlerAddFeed))
+	commands.Register("follow", internal.MiddlewareLoggedIn(internal.HandlerFollow))
+	commands.Register("unfollow", internal.MiddlewareLoggedIn(internal.HandlerUnfollow))
+	commands.Register("following", internal.MiddlewareLoggedIn(internal.HandlerFollowing))
 
 	// open connection to database
 	db, err := sql.Open("postgres", state.Config.DbUrl)
