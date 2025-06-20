@@ -3,10 +3,10 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	_ "github.com/lib/pq" // for sql interaction
-	"github.com/luckyhut/gator/internal"
-	"github.com/luckyhut/gator/internal/config"
-	"github.com/luckyhut/gator/internal/database"
+	_ "github.com/lib/pq" // required for sql interaction
+	"github.com/luckyhut/gator/command"
+	"github.com/luckyhut/gator/config"
+	"github.com/luckyhut/gator/database"
 	"log"
 	"os"
 )
@@ -16,22 +16,22 @@ func main() {
 	conf := config.Read()
 
 	// initialize state and commands
-	state := &internal.State{
+	state := &command.State{
 		Config: &conf,
 	}
-	commands := &internal.Commands{
-		Commands_list: make(map[string]func(*internal.State, internal.Command) error),
+	commands := &command.Commands{
+		Commands_list: make(map[string]func(*command.State, command.Command) error),
 	}
-	commands.Register("login", internal.HandlerLogin)
-	commands.Register("register", internal.HandlerRegister)
-	commands.Register("reset", internal.HandlerReset)
-	commands.Register("users", internal.HandlerUsers)
-	commands.Register("agg", internal.HandlerAgg)
-	commands.Register("feeds", internal.HandlerFeeds)
-	commands.Register("addfeed", internal.MiddlewareLoggedIn(internal.HandlerAddFeed))
-	commands.Register("follow", internal.MiddlewareLoggedIn(internal.HandlerFollow))
-	commands.Register("unfollow", internal.MiddlewareLoggedIn(internal.HandlerUnfollow))
-	commands.Register("following", internal.MiddlewareLoggedIn(internal.HandlerFollowing))
+	commands.Register("login", command.HandlerLogin)
+	commands.Register("register", command.HandlerRegister)
+	commands.Register("reset", command.HandlerReset)
+	commands.Register("users", command.HandlerUsers)
+	commands.Register("agg", command.HandlerAgg)
+	commands.Register("feeds", command.HandlerFeeds)
+	commands.Register("addfeed", command.MiddlewareLoggedIn(command.HandlerAddFeed))
+	commands.Register("follow", command.MiddlewareLoggedIn(command.HandlerFollow))
+	commands.Register("unfollow", command.MiddlewareLoggedIn(command.HandlerUnfollow))
+	commands.Register("following", command.MiddlewareLoggedIn(command.HandlerFollowing))
 
 	// open connection to database
 	db, err := sql.Open("postgres", state.Config.DbUrl)
@@ -47,7 +47,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	current_command := &internal.Command{
+	current_command := &command.Command{
 		Name: os.Args[1],
 		Args: os.Args[2:],
 	}
