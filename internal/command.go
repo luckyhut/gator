@@ -131,17 +131,53 @@ func printUsers(s *State, users []string) {
 }
 
 func HandlerAgg(s *State, cmd Command) error {
-	// create a context and call helper
-	httpContext := context.Background()
-
-	result, err := fetchFeed(httpContext, cmd.Args[0])
-
-	// exit if error
+	err := scrapeFeeds(s, cmd)
 	if err != nil {
 		errors.New("Error registering site")
 	}
+	return nil
+}
 
-	fmt.Println(result)
+func scrapeFeeds(s *State, cmd Command) error {
+	if len(cmd.Args) < 1 {
+		return errors.New("Not enough arguments")
+	}
+	ctx := context.Background()
+	duration, err := time.ParseDuration(cmd.Args[0])
+	if err != nil {
+		return errors.New("Error parsing duration")
+	}
+
+	fmt.Println("Collecting feeds every", duration)
+
+	ticker := time.NewTicker(duration)
+	defer ticker.Stop()
+
+	for ; ; <-ticker.C {
+		nextFeed, err := s.Db.GetNextFeedToFetch(ctx)
+		if err != nil {
+			return errors.New("Error getting next feed from database")
+		}
+
+		curTime := sql.NullTime{
+			Time:  time.Now(),
+			Valid: true,
+		}
+		params := database.MarkFeedFetchedParams{
+			ID:            nextFeed.ID,
+			LastFetchedAt: curTime,
+		}
+		s.Db.MarkFeedFetched(ctx, params)
+
+		feed, err := fetchFeed(ctx, nextFeed.Url.String)
+		if err != nil {
+			return err
+		}
+
+		for i := 0; i < len(feed.Channel.Item); i++ {
+			fmt.Println(feed.Channel.Item[i].Title)
+		}
+	}
 	return nil
 }
 
