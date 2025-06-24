@@ -23,10 +23,12 @@ WHERE url = $1;
 -- name: ResetFeeds :exec
 DELETE FROM feeds;
 
--- name: MarkFeedFetched :exec
+-- name: MarkFeedFetched :one
 UPDATE feeds
-SET last_fetched_at = $2, updated_at = $2
-WHERE id = $1;
+SET last_fetched_at = NOW(),
+updated_at = NOW()
+WHERE id = $1
+returning *;
 
 -- name: GetNextFeedToFetch :one
 SELECT *

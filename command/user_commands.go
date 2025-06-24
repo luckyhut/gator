@@ -39,7 +39,7 @@ func HandlerRegister(s *State, cmd Command) error {
 	// make params for new user
 	dbContext := context.Background()
 	userUuid := uuid.New()
-	curTime := time.Now()
+	curTime := time.Now().UTC()
 
 	// check to see if user is registered
 	_, err := s.Db.GetUser(dbContext, cmd.Args[0])

@@ -28,6 +28,7 @@ func main() {
 	commands.Register("users", command.HandlerUsers)
 	commands.Register("agg", command.HandlerAgg)
 	commands.Register("feeds", command.HandlerFeeds)
+	commands.Register("browse", command.HandlerBrowse)
 	commands.Register("addfeed", command.MiddlewareLoggedIn(command.HandlerAddFeed))
 	commands.Register("follow", command.MiddlewareLoggedIn(command.HandlerFollow))
 	commands.Register("unfollow", command.MiddlewareLoggedIn(command.HandlerUnfollow))

@@ -12,58 +12,59 @@ import (
 	"html"
 	"io"
 	"net/http"
+	"reflect"
+	"strconv"
+	"strings"
 	"time"
 )
 
 func HandlerAgg(s *State, cmd Command) error {
-	err := scrapeFeeds(s, cmd)
-	if err != nil {
-		errors.New("Error registering site")
-	}
-	return nil
-}
-
-func scrapeFeeds(s *State, cmd Command) error {
 	if len(cmd.Args) < 1 {
 		return errors.New("Not enough arguments")
 	}
-	ctx := context.Background()
 	duration, err := time.ParseDuration(cmd.Args[0])
 	if err != nil {
 		return errors.New("Error parsing duration")
 	}
 
 	fmt.Println("Collecting feeds every", duration)
-
 	ticker := time.NewTicker(duration)
 	defer ticker.Stop()
 
 	for ; ; <-ticker.C {
-		nextFeed, err := s.Db.GetNextFeedToFetch(ctx)
-		if err != nil {
-			return errors.New("Error getting next feed from database")
-		}
-
-		curTime := sql.NullTime{
-			Time:  time.Now(),
-			Valid: true,
-		}
-		params := database.MarkFeedFetchedParams{
-			ID:            nextFeed.ID,
-			LastFetchedAt: curTime,
-		}
-		s.Db.MarkFeedFetched(ctx, params)
-
-		feed, err := fetchFeed(ctx, nextFeed.Url.String)
+		err := scrapeFeeds(s)
 		if err != nil {
 			return err
 		}
+	}
+}
 
-		for i := 0; i < len(feed.Channel.Item); i++ {
-			fmt.Println(feed.Channel.Item[i].Title)
+func scrapeFeeds(s *State) error {
+	ctx := context.Background()
+	nextFeed, err := s.Db.GetNextFeedToFetch(ctx)
+	if err != nil {
+		return errors.New("Error getting next feed from database")
+	}
+
+	s.Db.MarkFeedFetched(ctx, nextFeed.ID)
+
+	feed, err := fetchFeed(ctx, nextFeed.Url.String)
+	if err != nil {
+		return err
+	}
+
+	for _, item := range feed.Channel.Item {
+		params := createPostParams(&item, &nextFeed)
+		err = s.Db.CreatePost(ctx, *params)
+		if err != nil {
+			if strings.Contains(err.Error(), "duplicate key") {
+				continue
+			}
+			fmt.Println("Error type: ", reflect.TypeOf(err))
+			return errors.New("Error adding post to database")
 		}
 	}
-	return nil // unreachable
+	return nil
 }
 
 func fetchFeed(ctx context.Context, feedURL string) (*rss.RSSFeed, error) {
@@ -88,11 +89,11 @@ func fetchFeed(ctx context.Context, feedURL string) (*rss.RSSFeed, error) {
 		return nil, errors.New("Error reading response body")
 	}
 
-	// xml.Unmarshal (works the same as json.Unmarshal)
+	// xml.Unmarshal
 	var feed rss.RSSFeed
 	err = xml.Unmarshal(body, &feed)
-	fmt.Println(feed)
 	if err != nil {
+		fmt.Println(feed)
 		return nil, errors.New("Error unmarshaling xml data")
 	}
 
@@ -106,8 +107,22 @@ func unescapeHtml(feed *rss.RSSFeed) {
 	feed.Channel.Description = html.UnescapeString(feed.Channel.Description)
 	for i := range feed.Channel.Item {
 		feed.Channel.Item[i].Title = html.UnescapeString(feed.Channel.Item[i].Title)
-		feed.Channel.Item[i].Title = html.UnescapeString(feed.Channel.Item[i].Title)
+		feed.Channel.Item[i].Description = html.UnescapeString(feed.Channel.Item[i].Description)
 	}
+}
+
+func createPostParams(item *rss.RSSItem, feed *database.Feed) *database.CreatePostParams {
+	params := database.CreatePostParams{
+		ID:          uuid.New(),
+		CreatedAt:   time.Now().UTC(),
+		UpdatedAt:   time.Now().UTC(),
+		Title:       sql.NullString{String: item.Title, Valid: true},
+		Url:         item.Link,
+		Description: sql.NullString{String: item.Description, Valid: true},
+		PublishedAt: sql.NullString{String: item.PubDate, Valid: true},
+		FeedID:      feed.ID,
+	}
+	return &params
 }
 
 func HandlerAddFeed(s *State, cmd Command, user database.User) error {
@@ -115,41 +130,31 @@ func HandlerAddFeed(s *State, cmd Command, user database.User) error {
 		return errors.New("Must include a name and url with this command")
 	}
 
-	feedUuid := uuid.New()
-	curTime := time.Now()
-	dbContext := context.Background()
-	name := sql.NullString{String: cmd.Args[0], Valid: true}
-	url := sql.NullString{String: cmd.Args[1], Valid: true}
-
-	userUuid := uuid.NullUUID{UUID: user.ID, Valid: true}
-
 	params := database.CreateFeedParams{
-		ID:        feedUuid,
-		CreatedAt: curTime,
-		UpdatedAt: curTime,
-		Name:      name,
-		Url:       url,
-		UserID:    userUuid,
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		Name:      sql.NullString{String: cmd.Args[0], Valid: true},
+		Url:       sql.NullString{String: cmd.Args[1], Valid: true},
+		UserID:    uuid.NullUUID{UUID: user.ID, Valid: true},
 	}
 
-	// run createfeed
-	s.Db.CreateFeed(dbContext, params)
+	s.Db.CreateFeed(context.Background(), params)
 
-	feed_id, err := s.Db.GetFeed(dbContext, url)
+	feed_id, err := s.Db.GetFeed(context.Background(), sql.NullString{String: cmd.Args[1], Valid: true})
 	if err != nil {
 		return errors.New("Error getting feed from database")
 	}
 
-	feedFollowsUuid := uuid.New()
 	feedFollowParams := database.CreateFeedFollowParams{
-		ID:        feedFollowsUuid,
-		CreatedAt: curTime,
-		UpdatedAt: curTime,
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 		UserID:    user.ID,
 		FeedID:    feed_id,
 	}
 
-	s.Db.CreateFeedFollow(dbContext, feedFollowParams)
+	s.Db.CreateFeedFollow(context.Background(), feedFollowParams)
 
 	return nil
 }
@@ -160,8 +165,48 @@ func HandlerFeeds(s *State, cmd Command) error {
 	if err != nil {
 		return errors.New("Unable to get list of feeds from database")
 	}
-	fmt.Println(result)
+	fmt.Println("handlerFeeds result: ", result)
 
+	return nil
+}
+
+func HandlerBrowse(s *State, cmd Command) error {
+	numPosts := 0
+	var err error
+	if len(cmd.Args) == 0 {
+		numPosts = 2
+	} else {
+		numPosts, err = strconv.Atoi(cmd.Args[0])
+		if err != nil {
+			return errors.New("Number of posts must be an integer")
+		}
+	}
+	ctx := context.Background()
+	userUuid, err := s.Db.GetUser(ctx, s.Config.CurrentUserName)
+	if err != nil {
+		return err
+	}
+	posts, err := s.Db.GetPostsForUser(ctx, userUuid.ID)
+	if err != nil {
+		return err
+	}
+	if len(posts) == 0 {
+		return errors.New("No posts to display")
+	}
+	if len(posts) == 1 {
+		fmt.Println("---------------------------------------------------")
+		fmt.Printf("%s\n", posts[0].Title.String)
+		fmt.Printf("%s\n", posts[0].Description.String)
+		fmt.Printf("%s\n", posts[0].Url)
+		fmt.Println("---------------------------------------------------")
+	}
+	for i := 0; i < numPosts; i++ {
+		fmt.Println("---------------------------------------------------")
+		fmt.Printf("%s\n", posts[i].Title.String)
+		fmt.Printf("%s\n", posts[i].Description.String)
+		fmt.Printf("%s\n", posts[i].Url)
+		fmt.Println("---------------------------------------------------")
+	}
 	return nil
 }
 
@@ -175,7 +220,7 @@ func HandlerFollow(s *State, cmd Command, user database.User) error {
 	feedFollowUuid := uuid.New()
 
 	// updated_at, created_at
-	curTime := time.Now()
+	curTime := time.Now().UTC()
 
 	// feed_id
 	url := sql.NullString{String: cmd.Args[0], Valid: true}
