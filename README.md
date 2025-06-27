@@ -3,10 +3,10 @@
 ## Fetches RSS feeds from urls.
 
 ## Requirements
-`go 1.24.3`
-A working connection to a database is required. For example, I'm running *postrgesql* in docker on my computer with the default port and here's my connection string. You'll have to change it based on your setup.
+- `go 1.24.3`
+- A working connection to a database is required. For example, I'm running *postrgesql* in docker on my computer with the default port and here's my connection string. You'll have to change it based on your setup.
 `{"db_url":"postgres://postgres:postgres@localhost:5432/gator?sslmode=disable","current_user_name":"<user>"}`
-This config file should be named `.gatorconfig` and stored at `~/.gatorconfig`
+- This config file containing the connection string and username should be named `.gatorconfig` and stored at `~/.gatorconfig`
 
 ## Installation
 Gator can be installed with `go install github.com/luckyhut/gator@latest`
